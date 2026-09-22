@@ -1,0 +1,17 @@
+# flyctl launch added from .idea/.idea.Message_Agent/.idea/.gitignore
+# Default ignored files
+.idea/.idea.Message_Agent/.idea/shelf
+.idea/.idea.Message_Agent/.idea/workspace.xml
+# Editor-based HTTP Client requests
+.idea/.idea.Message_Agent/.idea/httpRequests
+# Rider ignored files
+.idea/.idea.Message_Agent/.idea/modules.xml
+.idea/.idea.Message_Agent/.idea/contentModel.xml
+.idea/.idea.Message_Agent/.idea/projectSettingsUpdater.xml
+.idea/.idea.Message_Agent/.idea/.idea.Message_Agent.iml
+# Ignored default folder with query files
+.idea/.idea.Message_Agent/.idea/queries
+# Datasource local storage ignored files
+.idea/.idea.Message_Agent/.idea/dataSources
+.idea/.idea.Message_Agent/.idea/dataSources.local.xml
+fly.toml

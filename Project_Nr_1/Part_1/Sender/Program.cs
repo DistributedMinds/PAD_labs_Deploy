@@ -7,7 +7,7 @@ using Sender;
 Console.WriteLine("Sender");
 
 var senderSocket = new SenderSocket();
-senderSocket.Connect(Settings.BROKER_IP, Settings.BROKER_PORT);
+senderSocket.Connect(Settings.Host, Settings.BROKER_PORT);
 
 if (senderSocket.IsConected)
 {
@@ -45,7 +45,7 @@ if (senderSocket.IsConected)
             payLoadString = writer.ToString();
         }
         
-        byte[] data = Encoding.UTF8.GetBytes(payLoadString);
+        byte[] data = Encoding.UTF8.GetBytes(payLoadString + "\n");
         senderSocket.Send(data);
     }
 }

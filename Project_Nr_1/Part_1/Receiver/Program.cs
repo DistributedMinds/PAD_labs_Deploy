@@ -11,7 +11,7 @@ namespace Receiver
 
             var receiverSocket = new ReceiverSocket();
 
-            receiverSocket.Connect(Settings.BROKER_IP, Settings.BROKER_PORT);
+            receiverSocket.Connect(Settings.Host, Settings.BROKER_PORT);
 
             bool authenticated = false;
 
