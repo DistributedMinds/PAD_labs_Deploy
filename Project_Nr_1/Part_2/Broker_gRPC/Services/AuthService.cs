@@ -44,6 +44,12 @@ public class AuthService : Authenticator.AuthenticatorBase
 
         if (!success)
         {
+            _logger.LogWarning(
+                "Failed {Mode} for '{User}' from {Address}",
+                isSignUp ? "signup" : "signin",
+                request.Username,
+                request.Address);
+
             return new AuthReply
             {
                 Success = false,

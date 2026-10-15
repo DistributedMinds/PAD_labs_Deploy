@@ -3,6 +3,7 @@ using Broker_gRPC.Models;
 using Broker_gRPC.Storage;
 using Grpc.Core;
 using GrpcAgent;
+using Microsoft.Extensions.Logging;
 
 namespace Broker_gRPC.Services
 {
@@ -10,11 +11,13 @@ namespace Broker_gRPC.Services
     {
         private readonly IPersistentStore _persistentStore;
         private readonly IConnectionStorage _connectionStorage;
+        private readonly ILogger<SubscriberService> _logger;
 
-        public SubscriberService(IPersistentStore persistentStore, IConnectionStorage connectionStorage)
+        public SubscriberService(IPersistentStore persistentStore, IConnectionStorage connectionStorage, ILogger<SubscriberService> logger)
         {
             _persistentStore = persistentStore;
             _connectionStorage = connectionStorage;
+            _logger = logger;
         }
 
         public override Task<SubscribeReply> Subscribe(SubscribeRequest request, ServerCallContext context)
@@ -35,7 +38,7 @@ namespace Broker_gRPC.Services
 
             _persistentStore.AddSubscription(clientId, request.Topic);
 
-            Console.WriteLine($"Client {clientId} subscribed to topic: {request.Topic}");
+            _logger.LogInformation("Client {Client} subscribed to topic: {Topic}", clientId, request.Topic);
 
             return Task.FromResult(new SubscribeReply { Success = true });
         }
@@ -48,7 +51,7 @@ namespace Broker_gRPC.Services
 
             _persistentStore.RemoveSubscription(clientId, request.Topic);
 
-            Console.WriteLine($"Client {clientId} unsubscribed from topic: {request.Topic}");
+            _logger.LogInformation("Client {Client} unsubscribed from topic: {Topic}", clientId, request.Topic);
 
             return Task.FromResult(new SubscribeReply { Success = true });
         }

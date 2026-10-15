@@ -23,9 +23,9 @@ public class PublisherService : Publisher.PublisherBase
         ServerCallContext context)
     {
         _logger.LogInformation(
-            "Topic: {Topic}, Message: {Message}",
-            request.Topic,
-            request.Message);
+              "Message received from {Peer}. Topic: {Topic}",
+                context.Peer,
+                request.Topic);
 
         var payload = new PayLoad
         {
