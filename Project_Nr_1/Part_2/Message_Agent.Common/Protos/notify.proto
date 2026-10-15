@@ -5,15 +5,14 @@ option csharp_namespace = "GrpcAgent";
 package GrpcAgent;
 
 service Notifier {
-  rpc Notify (NotifyRequest) returns (NotifyReply);
+  rpc Listen (ListenRequest) returns (stream DeliveryMessage);
 }
 
-message NotifyRequest {
-  string topic = 1;
-  string message = 2;
-}
+message ListenRequest {}
 
-message NotifyReply {
-  bool success = 1;
+message DeliveryMessage {
+  string id = 1;
+  string topic = 2;
+  string message = 3;
+  string created_at = 4;
 }
-

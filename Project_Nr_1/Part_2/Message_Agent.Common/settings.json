@@ -1,5 +1,3 @@
 {
-  "Broker": {
-    "Url": "https://localhost:7132"
-  }
+  "BrokerUrl": "https://pad-broker-sandu.fly.dev"
 }

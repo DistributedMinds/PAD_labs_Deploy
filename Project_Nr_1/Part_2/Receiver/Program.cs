@@ -2,35 +2,28 @@
 using Grpc.Net.Client;
 using GrpcAgent;
 using Message_Agent.Common;
-using Receiver.Services;
 
 var settings = Settings.Load();
-var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.ConfigureKestrel(o =>
-    o.ListenAnyIP(settings.ReceiverPort, l => l.UseHttps()));
-
-builder.Services.AddGrpc();
-builder.Services.AddSingleton<ReceivedMessagesStore>();
-
-var app = builder.Build();
-
-app.MapGrpcService<MessageReceiverService>();
-
-app.Start();
-
-var channel = GrpcChannel.ForAddress(settings.BrokerUrl);
+var channel = GrpcChannel.ForAddress(settings.BrokerUrl, new GrpcChannelOptions
+{
+    HttpHandler = new SocketsHttpHandler
+    {
+        PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan,
+        KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+        KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
+        EnableMultipleHttp2Connections = true
+    }
+});
 var authClient = new Authenticator.AuthenticatorClient(channel);
 var subscriberClient = new Subscriber.SubscriberClient(channel);
+var notifierClient = new Notifier.NotifierClient(channel);
 
-// Kestrel raportează adresa ca https://[::]:PORT, care nu poate fi apelată de broker.
-// Păstrăm portul real și punem host-ul din setări (implicit localhost).
-int receiverPort = new Uri(app.Urls.First()).Port;
-string receiverAddress = $"https://{settings.ReceiverHost}:{receiverPort}";
-
-var messagesStore = app.Services.GetRequiredService<ReceivedMessagesStore>();
 string? token = null;
-List<string> topics = new List<string>();
+var topics = new List<string>();
+var receivedMessages = new List<(DateTime At, string Topic, string Text)>();
+var messagesLock = new object();
+var cts = new CancellationTokenSource();
 
 Console.WriteLine("========== RECEIVER ==========");
 
@@ -61,7 +54,9 @@ while (!authenticated)
     {
         authenticated = true;
         Console.WriteLine(result.Message);
-        
+
+        // pornim ascultarea: brokerul trimite mesajele pe aceasta conexiune
+        _ = Task.Run(() => ListenLoop(cts.Token));
     }
     else
     {
@@ -141,22 +136,26 @@ while (running)
             Console.WriteLine();
             Console.WriteLine("===== RECEIVED MESSAGES =====");
 
-            var messages = messagesStore.GetAll();
+            List<(DateTime At, string Topic, string Text)> snapshot;
+            lock (messagesLock)
+            {
+                snapshot = receivedMessages.ToList();
+            }
 
-            if (messages.Count == 0)
+            if (snapshot.Count == 0)
             {
                 Console.WriteLine("No messages received.");
             }
             else
             {
-                foreach (var topicMessages in messages)
+                foreach (var group in snapshot.GroupBy(x => x.Topic))
                 {
                     Console.WriteLine();
-                    Console.WriteLine($"[{topicMessages.Key}]");
+                    Console.WriteLine($"[{group.Key}]");
 
-                    foreach (string message in topicMessages.Value)
+                    foreach (var msg in group)
                     {
-                        Console.WriteLine($"- {message}");
+                        Console.WriteLine($"- [{msg.At:HH:mm:ss}] {msg.Text}");
                     }
                 }
             }
@@ -165,6 +164,7 @@ while (running)
             break;
 
         case "5":
+            cts.Cancel();
             running = false;
             break;
 
@@ -181,8 +181,7 @@ while (running)
     var request = new AuthRequest
     {
         Username = username,
-        Password = password,
-        Address = receiverAddress
+        Password = password
     };
 
     try
@@ -223,8 +222,7 @@ void Subscribe(string topic)
 {
     var request = new SubscribeRequest
     {
-        Topic = topic,
-        Address = receiverAddress
+        Topic = topic
     };
 
     try
@@ -250,8 +248,7 @@ void Unsubscribe(string topic)
 {
     var request = new SubscribeRequest
     {
-        Topic = topic,
-        Address = receiverAddress
+        Topic = topic
     };
 
     try
@@ -270,5 +267,45 @@ void Unsubscribe(string topic)
     catch (Exception ex)
     {
         Console.WriteLine($"Error while unsubscribing: {ex.Message}");
+    }
+}
+
+async Task ListenLoop(CancellationToken ct)
+{
+    while (!ct.IsCancellationRequested)
+    {
+        try
+        {
+            using var call = notifierClient.Listen(new ListenRequest(), AuthHeaders(), cancellationToken: ct);
+
+            await foreach (var item in call.ResponseStream.ReadAllAsync(ct))
+            {
+                lock (messagesLock)
+                {
+                    receivedMessages.Add((DateTime.Now, item.Topic, item.Message));
+                }
+                Console.WriteLine($"\n[NEW] {item.Topic}: {item.Message}");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled && ct.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Unauthenticated)
+        {
+            Console.WriteLine("Sesiune expirata (brokerul a fost repornit). Reporneste Receiver-ul.");
+            return;
+        }
+        catch (RpcException ex)
+        {
+            Console.WriteLine($"Conexiune pierduta ({ex.StatusCode}), reincerc...");
+        }
+
+        try { await Task.Delay(2000, ct); }
+        catch (OperationCanceledException) { return; }
     }
 }

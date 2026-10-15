@@ -6,12 +6,19 @@ public class DatabaseInitializer
 {
     public static string GetDatabasePath()
     {
+        string? envPath = Environment.GetEnvironmentVariable("DB_PATH");
+        if (!string.IsNullOrWhiteSpace(envPath))
+        {
+            string fullPath = Path.GetFullPath(envPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            return fullPath;
+        }
+
         string dataDir = Path.Combine(GetProjectRoot(), "Data");
         Directory.CreateDirectory(dataDir);
 
         return Path.Combine(dataDir, "broker_messages.db");
     }
-
     public static void CreateTables(SqliteConnection connection)
     {
         using (var pragma = connection.CreateCommand())

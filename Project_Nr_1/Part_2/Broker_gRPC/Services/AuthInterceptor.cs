@@ -8,7 +8,11 @@ public class AuthInterceptor : Interceptor
 {
     public const string UserKey = "username";
 
-    private const string SubscriberPrefix = "/GrpcAgent.Subscriber/";
+    private static readonly string[] ProtectedPrefixes =
+    {
+        "/GrpcAgent.Subscriber/",
+        "/GrpcAgent.Notifier/"
+    };
     private const string BearerPrefix = "Bearer ";
 
     private readonly ISessionStore _sessions;
@@ -23,26 +27,36 @@ public class AuthInterceptor : Interceptor
         ServerCallContext context,
         UnaryServerMethod<TRequest, TResponse> continuation)
     {
-        // Doar Subscribe/Unsubscribe cer autentificare (ca în Part 1)
-        if (context.Method.StartsWith(SubscriberPrefix, StringComparison.Ordinal))
-        {
-            var header = context.RequestHeaders.GetValue("authorization");
-
-            string? token = header != null &&
-                            header.StartsWith(BearerPrefix, StringComparison.OrdinalIgnoreCase)
-                ? header.Substring(BearerPrefix.Length)
-                : null;
-
-            string? username = token == null ? null : _sessions.GetUsername(token);
-            if (username == null)
-            {
-                Console.WriteLine($"[AUTH] header='{header}', token='{token}'");
-                throw new RpcException(new Status(StatusCode.Unauthenticated, "not authenticated"));
-            }
-
-            context.UserState[UserKey] = username;
-        }
-
+        Authenticate(context);
         return continuation(request, context);
+    }
+
+    public override Task ServerStreamingServerHandler<TRequest, TResponse>(
+        TRequest request,
+        IServerStreamWriter<TResponse> responseStream,
+        ServerCallContext context,
+        ServerStreamingServerMethod<TRequest, TResponse> continuation)
+    {
+        Authenticate(context);
+        return continuation(request, responseStream, context);
+    }
+
+    private void Authenticate(ServerCallContext context)
+    {
+        if (!ProtectedPrefixes.Any(p => context.Method.StartsWith(p, StringComparison.Ordinal)))
+            return;
+
+        var header = context.RequestHeaders.GetValue("authorization");
+
+        string? token = header != null &&
+                        header.StartsWith(BearerPrefix, StringComparison.OrdinalIgnoreCase)
+            ? header.Substring(BearerPrefix.Length)
+            : null;
+
+        string? username = token == null ? null : _sessions.GetUsername(token);
+        if (username == null)
+            throw new RpcException(new Status(StatusCode.Unauthenticated, "not authenticated"));
+
+        context.UserState[UserKey] = username;
     }
 }
